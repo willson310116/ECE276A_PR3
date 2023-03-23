@@ -1,214 +1,113 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from transforms3d.euler import mat2euler
+from numpy.linalg import norm
+import argparse
 
-def load_data(file_name):
-    '''
-    function to read visual features, IMU measurements, and calibration parameters
-    Input:
-        file_name: the input data file. Should look like "XX.npz"
-    Output:
-        t: time stamp
-            with shape 1*t
-        features: visual feature point coordinates in stereo images, 
-            with shape 4*n*t, where n is number of features
-        linear_velocity: velocity measurements in IMU frame
-            with shape 3*t
-        angular_velocity: angular velocity measurements in IMU frame
-            with shape 3*t
-        K: (left)camera intrinsic matrix
-            with shape 3*3
-        b: stereo camera baseline
-            with shape 1
-        imu_T_cam: extrinsic transformation from (left) camera to imu frame, in SE(3).
-            with shape 4*4
-    '''
-    with np.load(file_name) as data:
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="SLAM")
+    parser.add_argument('--d', default="03", type=str, help='dataset')
+    parser.add_argument('--r', default=100, type=int, help='reduce feature factor')
+    parser.add_argument('--w', default=10e-7, type=float, help='w_scale')
+    parser.add_argument('--v', default=100, type=int, help='v_scale')
+
+    return parser.parse_args()
+
+def hat_map(vec):
+    vec_hat = np.zeros((3,3))
+    vec_hat[2,1] = vec[0]
+    vec_hat[1,2] = -vec[0]
+    vec_hat[2,0] = -vec[1]
+    vec_hat[0,2] = vec[1]
+    vec_hat[0,1] = -vec[2]
+    vec_hat[1,0] = vec[2]
+    return vec_hat
+
+def adjoint(p, theta):
+    p_hat     = hat_map(p)
+    theta_hat = hat_map(theta)
+    u_adjoint = np.zeros((6,6))
+    u_adjoint[:3,:3] = theta_hat
+    u_adjoint[3:,3:] = theta_hat
+    u_adjoint[:3,3:] = p_hat
+    return u_adjoint
+
+def twist(p, theta):
+    twist        = np.zeros((4,4))
+    theta_hat    = hat_map(theta)
+    twist[:3,:3] = theta_hat
+    twist[:3,3]  = p
+    return twist
+
+def rodrigues_3(p, theta):
+    u  = twist(p, theta) # get u in SE(3)
+    u2 = np.dot(u, u)   # u^2
+    u3 = np.dot(u, u2)  # u^3
+    u2_coeff = (1 - np.cos(norm(theta))) / (norm(theta) ** 2)
+    u3_coeff = (norm(theta) - np.sin(norm(theta))) / (np.power(norm(theta), 3))
     
-        t = data["time_stamps"] # time_stamps
-        features = data["features"] # 4 x num_features : pixel coordinates of the visual features
-        linear_velocity = data["linear_velocity"] # linear velocity in body-frame coordinates
-        angular_velocity = data["angular_velocity"] # angular velocity in body-frame coordinates
-        K = data["K"] # intrinsic calibration matrix
-        b = data["b"] # baseline
-        imu_T_cam = data["imu_T_cam"] # transformation from left camera frame to imu frame 
+    T = np.eye(4) + u + u2_coeff * u2 + u3_coeff * u3
+    return T
+
+def approx_rodrigues_3(p, theta):
+    u  = twist(p,theta) # get u in SE(3)
+    T = np.eye(4) + u
+    return T
+
+def rodrigues_6(p, theta):
+    u = adjoint(p, theta) # get u in adjoint of SE(3)
+    u2 = np.dot(u, u)     # u^2
+    u3 = np.dot(u, u2)    # u^3
+    u4 = np.dot(u, u3)    # u^4
+    u_coeff  = (3*np.sin(norm(theta)) - norm(theta)*np.cos(norm(theta))) / (2 * norm(theta))
+    u2_coeff = (4 - norm(theta)*np.sin(norm(theta)) - 4*np.cos(norm(theta))) / (2 * norm(theta)**2)
+    u3_coeff = (np.sin(norm(theta)) - norm(theta)*np.cos(norm(theta))) / (2 * np.power(norm(theta),3))
+    u4_coeff = (2 - norm(theta)*np.sin(norm(theta)) - 2*np.cos(norm(theta))) / (2 * np.power(norm(theta),4))
     
-    return t,features,linear_velocity,angular_velocity,K,b,imu_T_cam
+    T = np.eye(6) + u_coeff*u + u2_coeff*u2 + u3_coeff*u3 + u4_coeff*u4
+    return T
 
-def visualize_trajectory_2d(pose,path_name="Unknown",show_ori=False):
-    '''
-    function to visualize the trajectory in 2D
-    Input:
-        pose:   4*4*N matrix representing the camera pose, 
-                where N is the number of poses, and each
-                4*4 matrix is in SE(3)
-    '''
-    fig,ax = plt.subplots(figsize=(5,5))
-    n_pose = pose.shape[2]
-    ax.plot(pose[0,3,:],pose[1,3,:],'r-',label=path_name)
-    ax.scatter(pose[0,3,0],pose[1,3,0],marker='s',label="start")
-    ax.scatter(pose[0,3,-1],pose[1,3,-1],marker='o',label="end")
-  
-    if show_ori:
-        select_ori_index = list(range(0,n_pose,max(int(n_pose/50), 1)))
-        yaw_list = []
-        
-        for i in select_ori_index:
-            _,_,yaw = mat2euler(pose[:3,:3,i])
-            yaw_list.append(yaw)
-    
-        dx = np.cos(yaw_list)
-        dy = np.sin(yaw_list)
-        dx,dy = [dx,dy]/np.sqrt(dx**2+dy**2)
-        ax.quiver(pose[0,3,select_ori_index],pose[1,3,select_ori_index],dx,dy,\
-            color="b",units="xy",width=1)
-    
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.axis('equal')
-    ax.grid(False)
-    ax.legend()
-    plt.show(block=True)
+def get_calibration(K, b):
+    M   = np.vstack([K[:2], K[:2]])
+    arr = np.array([0, 0, -K[0,0] * float(b), 0]).reshape((4, 1))
+    M   = np.hstack([M, arr])
+    return M
 
-    return fig, ax
+def pixel_to_world(p, i_T_w, o_T_i, K, b):
+    uL, vL, uR, vR = p
+    fsu = K[0,0]
+    fsv = K[1,1]
+    cu  = K[0,2]
+    cv  = K[1,2]
+    z   = (fsu*b) / (uL-uR)
+    x   = z * (uL-cu) / fsu
+    y   = z * (vL-cv) / fsv
+    m_o = np.array([x,y,z,1]).reshape([4,1])
+    m_i = np.dot(np.linalg.inv(o_T_i), m_o)
+    m_w = np.dot(np.linalg.inv(i_T_w), m_i)
+    return m_w
 
-def projection(ph):
-  '''
-  ph = n x 4 = homogeneous point coordinates
-  r = n x 4 = ph/ph[...,2] = normalized z axis coordinates
-  '''  
-  return ph/ph[...,2,None]
-  
-def projectionJacobian(ph):
-  '''
-  ph = n x 4 = homogeneous point coordinates
-  J = n x 4 x 4 = Jacobian of ph/ph[...,2]
-  '''  
-  J = np.zeros(ph.shape+(4,))
-  iph2 = 1.0/ph[...,2]
-  ph2ph2 = ph[...,2]**2
-  J[...,0,0], J[...,1,1],J[...,3,3] = iph2,iph2,iph2
-  J[...,0,2] = -ph[...,0]/ph2ph2
-  J[...,1,2] = -ph[...,1]/ph2ph2
-  J[...,3,2] = -ph[...,3]/ph2ph2
-  return J
+def projection(q):
+    pi = q / q[2]
+    return pi
 
-def inversePose(T):
-  '''
-  @Input:
-    T = n x 4 x 4 = n elements of SE(3)
-  @Output:
-    iT = n x 4 x 4 = inverse of T
-  '''
-  iT = np.empty_like(T)
-  iT[...,0,0], iT[...,0,1], iT[...,0,2] = T[...,0,0], T[...,1,0], T[...,2,0] 
-  iT[...,1,0], iT[...,1,1], iT[...,1,2] = T[...,0,1], T[...,1,1], T[...,2,1] 
-  iT[...,2,0], iT[...,2,1], iT[...,2,2] = T[...,0,2], T[...,1,2], T[...,2,2]
-  iT[...,:3,3] = -np.squeeze(iT[...,:3,:3] @ T[...,:3,3,None])
-  iT[...,3,:] = T[...,3,:]
-  return iT
+def d_projection(q):
+    dq = np.zeros((4,4))
+    dq[0,0] = 1
+    dq[1,1] = 1
+    dq[0,2] = -q[0]/q[2]
+    dq[1,2] = -q[1]/q[2]
+    dq[3,2] = -q[3]/q[2]
+    dq[3,3] = 1
+    dq = dq / q[2]
+    return dq
 
-def axangle2skew(a):
-  '''
-  converts an n x 3 axis-angle to an n x 3 x 3 skew symmetric matrix 
-  '''
-  S = np.empty(a.shape[:-1]+(3,3))
-  S[...,0,0].fill(0)
-  S[...,0,1] =-a[...,2]
-  S[...,0,2] = a[...,1]
-  S[...,1,0] = a[...,2]
-  S[...,1,1].fill(0)
-  S[...,1,2] =-a[...,0]
-  S[...,2,0] =-a[...,1]
-  S[...,2,1] = a[...,0]
-  S[...,2,2].fill(0)
-  return S
+def circle(m):
+    s      = m[:3]
+    s_hat  = hat_map(s)
+    result = np.hstack((np.eye(3), -s_hat))
+    result = np.vstack((result, np.zeros((1,6))))
+    return result
 
-def axangle2twist(x):
-  '''
-  @Input:
-    x = n x 6 = n elements of position and axis-angle
-  @Output:
-    T = n x 4 x 4 = n elements of se(3)
-  '''
-  T = np.zeros(x.shape[:-1]+(4,4))
-  T[...,0,1] =-x[...,5]
-  T[...,0,2] = x[...,4]
-  T[...,0,3] = x[...,0]
-  T[...,1,0] = x[...,5]
-  T[...,1,2] =-x[...,3]
-  T[...,1,3] = x[...,1]
-  T[...,2,0] =-x[...,4]
-  T[...,2,1] = x[...,3]
-  T[...,2,3] = x[...,2]
-  return T
-
-def twist2axangle(T):
-  '''
-  converts an n x 4 x 4 twist (se3) matrix to an n x 6 axis-angle 
-  '''
-  return T[...,[0,1,2,2,0,1],[3,3,3,1,2,0]]
-
-def axangle2adtwist(x):
-  '''
-  @Input:
-    x = n x 6 = n elements of position and axis-angle
-  @Output:
-    A = n x 6 x 6 = n elements of ad(se(3))
-  '''
-  A = np.zeros(x.shape+(6,))
-  A[...,0,1] =-x[...,5]
-  A[...,0,2] = x[...,4]
-  A[...,0,4] =-x[...,2]
-  A[...,0,5] = x[...,1]
-  
-  A[...,1,0] = x[...,5]
-  A[...,1,2] =-x[...,3]
-  A[...,1,3] = x[...,2]
-  A[...,1,5] =-x[...,0]
-  
-  A[...,2,0] =-x[...,4]
-  A[...,2,1] = x[...,3]
-  A[...,2,3] =-x[...,1]
-  A[...,2,4] = x[...,0]
-  
-  A[...,3,4] =-x[...,5] 
-  A[...,3,5] = x[...,4] 
-  A[...,4,3] = x[...,5]
-  A[...,4,5] =-x[...,3]   
-  A[...,5,3] =-x[...,4]
-  A[...,5,4] = x[...,3]
-  return A
-
-def twist2pose(T):
-  '''
-  converts an n x 4 x 4 twist (se3) matrix to an n x 4 x 4 pose (SE3) matrix 
-  '''
-  rotang = np.sqrt(np.sum(T[...,[2,0,1],[1,2,0]]**2,axis=-1)[...,None,None]) # n x 1
-  Tn = np.nan_to_num(T / rotang)
-  Tn2 = Tn@Tn
-  Tn3 = Tn@Tn2
-  eye = np.zeros_like(T)
-  eye[...,[0,1,2,3],[0,1,2,3]] = 1.0
-  return eye + T + (1.0 - np.cos(rotang))*Tn2 + (rotang - np.sin(rotang))*Tn3
-  
-def axangle2pose(x):
-  '''
-  @Input:
-    x = n x 6 = n elements of position and axis-angle
-  @Output:
-    T = n x 4 x 4 = n elements of SE(3)
-  '''
-  return twist2pose(axangle2twist(x))
-
-def pose2adpose(T):
-  '''
-  converts an n x 4 x 4 pose (SE3) matrix to an n x 6 x 6 adjoint pose (ad(SE3)) matrix 
-  '''
-  calT = np.empty(T.shape[:-2]+(6,6))
-  calT[...,:3,:3] = T[...,:3,:3]
-  calT[...,:3,3:] = axangle2skew(T[...,:3,3]) @ T[...,:3,:3]
-  calT[...,3:,:3] = np.zeros(T.shape[:-2]+(3,3))
-  calT[...,3:,3:] = T[...,:3,:3]
-  return calT
-
+def roll(rad):
+    return np.array([[1, 0, 0], [0, np.cos(rad), -np.sin(rad)],
+                     [0, np.sin(rad), np.cos(rad)]])
