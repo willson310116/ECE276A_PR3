@@ -29,6 +29,6 @@ under *.code/*
 ## SLAM results
 dataset 03             |  dataset 10
 :-------------------------:|:-------------------------:
-<img src="./demo/slam03.gif" width="250" height="250"/>  |  <img src="./demo/slam10.gif" width="250" height="250"/>
+<img src="./demo/slam03.gif" width="400" height="400"/>  |  <img src="./demo/slam10.gif" width="400" height="400"/>
 
 *raw data can be found in [./data](./data)*
