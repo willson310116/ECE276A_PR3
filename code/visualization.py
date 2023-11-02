@@ -29,15 +29,15 @@ def visualize_trajectory_2d(pose, save_path, path_name="Unknown", show_ori=False
     ax.axis('equal')
     ax.grid(False)
     ax.legend()
-    plt.savefig(save_path, dpi=150)
+    # plt.savefig(save_path, dpi=150)
 
     if show_plot:
         plt.show(block=True)
-    plt.close()
+    # plt.close()
 
     return fig, ax
 
-def visualize(pose, landmarks, save_path, path_name="Unknown",show_ori=False, show_plot=False):
+def visualize(pose, landmarks, save_path, path_name="slam",show_ori=True, show_plot=False):
     fig,ax = plt.subplots(figsize=(5,5))
     n_pose = pose.shape[2]
 
@@ -63,18 +63,25 @@ def visualize(pose, landmarks, save_path, path_name="Unknown",show_ori=False, sh
     ax.axis('equal')
     ax.grid(False)
     ax.legend()
+
+    ax.set_aspect('auto')
+    ax.set_xlim([-1200, 500])
+    ax.set_ylim([-1000, 600])
+    # ax.set_xlim([-1000, 300])
+    # ax.set_ylim([-500, 700])
+
     plt.savefig(save_path, dpi=150)
     if show_plot:
         plt.show(block=True)
-    plt.close()
+    # plt.close()
     return fig, ax
 
 def combine_visualize(pose,slam_pose, landmarks, slam_landmarks, save_path, path_name="Unknown", show_ori=False, show_plot=False):
     fig,ax = plt.subplots(figsize=(5,5))
     n_pose = pose.shape[2]
 
-    ax.plot(pose[0,3,:], pose[1,3,:], 'r-', label='orig')
-    ax.plot(slam_pose[0,3,:], slam_pose[1,3,:],' b-',label='slam')
+    ax.plot(pose[0,3,:], pose[1,3,:], 'b-', label='orig')
+    ax.plot(slam_pose[0,3,:], slam_pose[1,3,:],'r-',label='slam')
     ax.scatter(pose[0,3,0], pose[1,3,0], marker='s', label="start")
     ax.scatter(pose[0,3,-1], pose[1,3,-1], marker='o', label="end")
     ax.scatter(landmarks[:,0], landmarks[:,1], s=2, marker='o', label="landmarks")
@@ -97,9 +104,16 @@ def combine_visualize(pose,slam_pose, landmarks, slam_landmarks, save_path, path
     ax.axis('equal')
     ax.grid(False)
     ax.legend()
+
+    ax.set_aspect('auto')
+    ax.set_xlim([-1200, 500])
+    ax.set_ylim([-1000, 600])
+    # ax.set_xlim([-1000, 300])
+    # ax.set_ylim([-500, 700])
+
     plt.savefig(save_path, dpi=150)
 
     if show_plot:
         plt.show(block=True)
-    plt.close()
+    # plt.close()
     return fig, ax

@@ -4,8 +4,10 @@ from motion import *
 from observation import *
 from pr3_utils import inversePose
 from tqdm.auto import tqdm
+from visualization import *
 
-def visual_slam(t, v, w, features, K, b, cam_T_imu, v_scale=100, w_scale=10e-5):
+
+def visual_slam(t, v, w, features, K, b, cam_T_imu, dataset, reduce_factor, v_scale=100, w_scale=10e-5):
     # get time discretization
     tau = t[:,1:] - t[:,:-1]
     n = tau.shape[1]
@@ -90,6 +92,13 @@ def visual_slam(t, v, w, features, K, b, cam_T_imu, v_scale=100, w_scale=10e-5):
         w_curr = w[:,i] + noise
         mu_imu = mu_predict(mu_imu, v_curr, w_curr, dt)
         cov[-6:,-6:]  = cov_predict(cov[-6:,-6:], v_curr, w_curr, dt, W_noise)
+
+        if i % 50 == 0:
+            if i == 0:
+                continue
+            # print(imu_pose.shape)
+            # print(mu_obs.shape)
+            visualize(imu_pose[:,:,:i+1], mu_obs.reshape((num_feature, 4)), f"../frames/slam_{dataset}_{reduce_factor}_{i}.png")
         
     mu_obs = mu_obs.reshape((num_feature, 4))
     return inv_imu_pose, imu_pose, mu_obs

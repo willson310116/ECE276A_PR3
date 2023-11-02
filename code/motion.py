@@ -3,6 +3,19 @@ from utils import *
 from tqdm.auto import tqdm
 
 def motion_model_prediction(t, v, w, w_scale=10e-7):
+    '''
+        Get IMU pose using EKF prediction
+        
+        Input:
+            t - time stamps
+            v - linear velocity
+            w - angular velocity
+            w_scale - scale of the motion noise
+        Outputs:
+            pose     - world to IMU frame T over time, size 4x4xN
+            inv_pose - IMU to world frame T over time, size 4x4xN
+    '''
+    
     # get time discretization
     tau = t[:,1:] - t[:,:-1]
     n = tau.shape[1]

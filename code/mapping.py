@@ -1,8 +1,23 @@
 import numpy as np
 from utils import *
 from tqdm.auto import tqdm
+from visualization import *
+from numpy.linalg import inv
 
-def landmark_mapping(features, i_T_w, K, b, cam_T_imu, v_scale=100):
+def landmark_mapping(features, i_T_w, K, b, cam_T_imu, v_scale, w_T_i):
+    '''
+        Get landmarks position using EKF update
+        
+        Input:
+            features  - landmarks
+            i_T_w     - inverse imu pose
+            K         - camera calibration matrix
+            b         - stereo baseline
+            cam_T_imu - imu to camera transformation
+            v_scale   - scale of the observation noise
+        Outputs:
+            landmarks - landmarks position in the world frame
+    '''
     num_feature = features.shape[1]
     mu_hasinit  = np.zeros(num_feature)
     mu      = np.zeros((4 * num_feature, 1))
@@ -47,6 +62,13 @@ def landmark_mapping(features, i_T_w, K, b, cam_T_imu, v_scale=100):
         # update mu and cov
         mu = mu + P_block.dot(Kt.dot(zt-zt_hat))
         cov = np.dot((np.eye(3*num_feature) - np.dot(Kt,Ht)),cov)
+
+        # if i % 150 == 0:
+        #     if i == 0:
+        #         continue
+        #     print(i)
+        #     landmarks = mu.reshape([num_feature,4])
+        #     visualize(w_T_i[:,:,:i], landmarks, "save_path_mapping", show_ori=True, show_plot=True)
 
     landmarks = mu.reshape([num_feature,4])
     return landmarks

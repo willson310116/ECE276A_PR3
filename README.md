@@ -15,13 +15,20 @@ Implement visual-inertial simultaneous localization and mapping (SLAM) using an 
 
 
 ### Source code description:
-- **code/main.py**: Main function.
-- **code/mapping.py**: Functions for landmark mapping.
-- **code/motion.py**: Functions for motion model.
-- **code/observation.py**: Functions for observation model.
-- **code/pr3_utils.py**: Functions provided for some transformation.
-- **code/slam.ipynb**: For testing the process.
-- **code/utils.py**: Functions for transformation and others.
-- **code/visual_slam.py**: Functions for visual inertial slam.
-- **code/visualization.py**: Functions for visualizing the trajectory and landmark mapping.
-    
+under *.code/*
+- [main.py](./code/main.py): Main function.
+- [mapping.py](./code/mapping.py): Functions for landmark mapping.
+- [motion.py](./code/motion.py): Functions for motion model.
+- [observation.py](./code/observation.py): Functions for observation model.
+- [pr3_utils.py](./code/pr3_utils.py): Functions provided for some transformation.
+- [slam.ipynb](./code/slam.ipynb): For testing and debugging. **View the intermediate output of slam here!**
+- [utils.py.py](./code/utils.py): Functions for transformation and others.
+- [visual_slam.py](./code/visual_slam.py): Functions for visual inertial slam.
+- [visualization.py](./code/visualization.py): Functions for visualizing the trajectory and landmark mapping.
+
+## SLAM results
+dataset 03             |  dataset 10
+:-------------------------:|:-------------------------:
+<img src="./demo/slam03.gif" width="250" height="250"/>  |  <img src="./demo/slam10.gif" width="250" height="250"/>
+
+*raw data can be found in [./data](./data)*
